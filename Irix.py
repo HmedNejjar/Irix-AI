@@ -1,7 +1,8 @@
-"""Irix v1.5: Added conversation logging with router self evaluation"""
+"""Irix v1.6: Modified Irix to work with multiple agents by dividing task if required"""
 
 
 from __extract_json_robust import extract_json_robust
+from Agents import Agent
 import ollama
 import json
 import time
@@ -24,12 +25,18 @@ sys_prompt = prompts["system"]["default"]
 summary_prompt = prompts["summary"]["conversation"]
 routing_prompt = prompts["router"]["prompt"]
 eval_prompt = prompts["self_eval"]["prompt"]
+agents_prompt = prompts["agents"]
+heavy_prompt = prompts["heavy_synthesis"]["prompt"]
+
+agents = [Agent("edge_case_agent", AGENT, agents_prompt["edge_case"]),
+          Agent("constraints_agent", AGENT, agents_prompt["constraints"]),
+          Agent("builder_agent", AGENT, agents_prompt["builder"])]
+
 
     #Function to log bot's output 
 def log_telemetry(record: dict) -> None:
     with open(TELEMETRY_FILE, "a") as f:
         f.write(json.dumps(record, ensure_ascii=False) + '\n')
-
 def self_eval(usr_input: str, route: dict, answer: str):
     message = [{"role": "system","content": eval_prompt}]
     response = ollama.chat(model=ROUTER_MODEL, messages=message)
@@ -121,7 +128,7 @@ def router(usr_inpt, history):
     response = ollama.chat(ROUTER_MODEL, messages=messages)
     
     if not response.message.content:
-        return {"use_heavy": False}
+        return {"path": "direct"}
     
     # Try to extract clean JSON
     clean_json = extract_json_robust((response.message.content))
@@ -130,30 +137,63 @@ def router(usr_inpt, history):
         print(clean_json) #debugging
         return clean_json
     else:
-        return {"use_heavy": True}
+        return {"path": "deliberate"}
 
     #Handles the chatbot interaction by selecting the appropriate model, generating a response, and updating conversation history.
 def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
     route = router(usr_inpt, history)
-    model = hm if route["use_heavy"] else lm
+    if route["path"] == "deliberate":
+        start = time.time()
+        
+        model = lm
+        
+        print(f"Irix: ", end='', flush=True)
+        bot_answer_content = ""
+        bot_answer = ollama.chat(model= model, messages=history, stream=True)
+        
+        for chunk in bot_answer:                                               #
+            if chunk.message.content:                                          # Process streamed response chunks 
+                bot_answer_content += chunk.message.content                    # and print each chunk for smooth answer
+                print(chunk.message.content, end='', flush=True)               #
+        print()
     
-    start = time.time()
+        bot_message = {"role" : "assistant",
+                        "content" : bot_answer_content}
+        history.append(bot_message)
     
-    print(f"Irix({model}): ", end='', flush=True)
-    bot_answer_content = ""
-    bot_answer = ollama.chat(model= model, messages=history, stream=True)
+        latency = int((time.time() - start)*1000)
+    else:
+        agents_outputs = []
+        
+        for agent in agents:
+            result = agent.run(usr_inpt, context= None)
+            agents_outputs.append(result)
+        
+        synth_payload = {"question" : usr_inpt, "agents" : agents_outputs}
+         
+        synth_message = [{"role" : "system", "content" : heavy_prompt},
+                         {"role" : "user", "content" : json.dumps(synth_payload, ensure_ascii=False, indent= 2)}]
+        
+        start = time.time()
+        
+        model = hm
+        
+        print(f"Irix: ", end='', flush=True)
+        bot_answer_content = ""
+        bot_answer = ollama.chat(model= model, messages=synth_message + history, stream=True)
+        
+        for chunk in bot_answer:                                
+            if chunk.message.content:                           
+                bot_answer_content += chunk.message.content     
+                print(chunk.message.content, end='', flush=True)
+        print()
     
-    for chunk in bot_answer:                                               #
-        if chunk.message.content:                                          # Process streamed response chunks 
-            bot_answer_content += chunk.message.content                    # and print each chunk for smooth answer
-            print(chunk.message.content, end='', flush=True)               #
-    print()
-
-    bot_message = {"role" : "assistant",
-                    "content" : bot_answer_content}
-    history.append(bot_message)
-
-    latency = int((time.time() - start)*1000)
+        bot_message = {"role" : "assistant",
+                        "content" : bot_answer_content}
+        history.append(bot_message)
+    
+        latency = int((time.time() - start)*1000)
+        
     telemetry = {
     "timestamp": time.time(),
     "user_input": usr_inpt,
