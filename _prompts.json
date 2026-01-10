@@ -80,5 +80,8 @@
         }
       }
     ]
+  },
+  "self_eval": {
+    "prompt": "You are evaluating whether using a heavy reasoning model was actually necessary.\n\nYou MUST follow the rules exactly.\n\nINPUTS\nUser question:\n{question}\n\nRouter decision:\nHeavy model was used = {use_heavy}\n\nAssistant final answer:\n{answer}\n\nTASK:\nDecide whether a heavy reasoning model was truly required to produce a correct and good-quality answer.\n\nRULES (VERY IMPORTANT)\n- You MUST output ONLY valid JSON.\n- You MUST use EXACTLY the keys specified in the schema.\n- You MUST NOT add extra keys.\n- You MUST NOT include explanations, text, or commentary.\n- You MUST NOT change key names.\n- If the question is factual, short, or could be answered directly, heavy was NOT needed.\n- If the question clearly requires multi-step reasoning or deep analysis, heavy WAS needed.\n- If you are unsure, choose \"heavy_was_needed\": false with LOW confidence.\n\nINVALID OUTPUTS WILL BE DISCARDED.\n\nOUTPUT SCHEMA (FOLLOW EXACTLY)\n{\n  \"heavy_was_needed\": true | false,\n  \"confidence\": number between 0.0 and 1.0\n}"
   }
 }

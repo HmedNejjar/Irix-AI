@@ -1,13 +1,15 @@
-"""Irix v1.4: Modified the model selection from using keywords to using an LLM based router - semantic routing -
-                 which checks the context and selects the the adequate model for reasoning"""
+"""Irix v1.5: Added conversation logging with router self evaluation"""
 
 
 from __extract_json_robust import extract_json_robust
 import ollama
 import json
+import time
 
 PROMPT_FILE = "_prompts.json"
 HISTORY_FILE = "history.json"
+TELEMETRY_FILE = "_router_telemetry.jsonl"
+AGENT = "qwen3:1.7b"
 LIGHT_MODEL = "qwen2.5:7b"
 HEAVY_MODEL = "qwen3:8b"
 SUMMARY_MODEL = "phi3:mini"
@@ -21,6 +23,20 @@ with open (PROMPT_FILE, 'r') as f:
 sys_prompt = prompts["system"]["default"]
 summary_prompt = prompts["summary"]["conversation"]
 routing_prompt = prompts["router"]["prompt"]
+eval_prompt = prompts["self_eval"]["prompt"]
+
+    #Function to log bot's output 
+def log_telemetry(record: dict) -> None:
+    with open(TELEMETRY_FILE, "a") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + '\n')
+
+def self_eval(usr_input: str, route: dict, answer: str):
+    message = [{"role": "system","content": eval_prompt}]
+    response = ollama.chat(model=ROUTER_MODEL, messages=message)
+    
+    result = extract_json_robust(response.message.content)
+    return result if isinstance(result, dict) else None
+
 
     #Function to save history in a json file
 def saveHistory(history: list) -> None:
@@ -120,7 +136,9 @@ def router(usr_inpt, history):
 def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
     route = router(usr_inpt, history)
     model = hm if route["use_heavy"] else lm
-        
+    
+    start = time.time()
+    
     print(f"Irix({model}): ", end='', flush=True)
     bot_answer_content = ""
     bot_answer = ollama.chat(model= model, messages=history, stream=True)
@@ -135,6 +153,22 @@ def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
                     "content" : bot_answer_content}
     history.append(bot_message)
 
+    latency = int((time.time() - start)*1000)
+    telemetry = {
+    "timestamp": time.time(),
+    "user_input": usr_inpt,
+    "router_output": route,
+    "model_used": model,
+    "answer_length": len(bot_answer_content),
+    "latency_ms": latency
+    }
+
+    eval_result = self_eval(usr_inpt, route, bot_answer_content)
+    if eval_result:
+        telemetry["self_eval"] = eval_result
+    log_telemetry(telemetry)
+
+    
     #Main function that runs the Irix AI assistant
 def main() -> None:
     system_prompt = sys_prompt
