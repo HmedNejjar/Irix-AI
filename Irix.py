@@ -1,7 +1,9 @@
-"""Irix v1.1: added context dependent reasoning to explicit check for smart routing of the chatbot"""
+"Irix v1.2: Implemented permanent json file for history saving instead of temp one"
 
 
 import ollama
+import json  
+HISTORY_FILE = "history.json"
 
     #Function to check if user's query requires complex reasoning
 def ExplicitcheckForHeavyReasoning(usr_inpt: str) -> bool:
@@ -39,7 +41,22 @@ def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
     bot_message = {"role" : "assistant",
                     "content" : bot_answer_content}
     history.append(bot_message)
+    saveHistory(history)
 
+    #Function to save history in a json file
+def saveHistory(history: list):
+    with open(HISTORY_FILE, "w") as f:
+        json.dump(history, f, indent=2)
+
+    #Function to load existing history
+def loadHistory(sys_prompt: str) -> list:
+    try:
+        with open(HISTORY_FILE, "r") as f:
+            history:list  = json.load(f)
+            if isinstance(history, list):
+                return history
+    except FileNotFoundError:
+        return [{"role" : "system", "content" : sys_prompt}]
 
     #Main function that runs the Irix AI assistant
 def main() -> None:
@@ -62,10 +79,7 @@ def main() -> None:
 
 
     light_model, heavy_model = "qwen2.5:7b", "qwen3:8b"
-    history = []
-    default_settings = {"role" : "system",
-                        "content" : system_prompt}
-    history.append(default_settings)
+    history = loadHistory(system_prompt)
 
     while True:
         user_prompt = input("You: ").strip()
@@ -75,6 +89,7 @@ def main() -> None:
         user_message = {"role" : "user",
                         "content" : user_prompt}
         history.append(user_message)
+        saveHistory(history)
         chatbot(user_prompt, light_model, heavy_model, history)
 
 
