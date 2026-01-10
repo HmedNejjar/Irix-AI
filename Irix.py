@@ -1,15 +1,17 @@
-"""Irix v1.3: I. Added smart summarizing of history to save space and tokens, using light LLM 'phi3:mini'
-                II. Made a json file for all system prompts (default, summarize...)"""
+"""Irix v1.4: Modified the model selection from using keywords to using an LLM based router - semantic routing -
+                 which checks the context and selects the the adequate model for reasoning"""
 
 
+from __extract_json_robust import extract_json_robust
 import ollama
 import json
 
-PROMPT_FILE = "prompts.json"
+PROMPT_FILE = "_prompts.json"
 HISTORY_FILE = "history.json"
 LIGHT_MODEL = "qwen2.5:7b"
 HEAVY_MODEL = "qwen3:8b"
 SUMMARY_MODEL = "phi3:mini"
+ROUTER_MODEL = "phi3:mini"
 HISTORY_MAXSIZE = 14
 SUMMARY_TRIGGER = 16
 
@@ -18,25 +20,7 @@ with open (PROMPT_FILE, 'r') as f:
 
 sys_prompt = prompts["system"]["default"]
 summary_prompt = prompts["summary"]["conversation"]
-
-    #Function to check if user's query requires complex reasoning
-def ExplicitcheckForHeavyReasoning(usr_inpt: str) -> bool:
-    keywords = ("explain", "why", "how", "elaborate", "expand", "prove")
-    text = usr_inpt.lower()
-    return any(k in text for k in keywords)
-
-    #Function to check if user's query requires complex reasoning from context
-def ContextDependentReasoning(usr_inpt: str, history: list) -> bool:
-    if not history or history[-2]["role"] != "assistant":
-        return False
-
-    pronouns = ("this", "that", "it", "what you said")
-    text = usr_inpt.lower().strip()
-    return True if any(p in text for p in pronouns) and len(text.split()) <= 5 else False
-
-    #Function to decide which model to use
-def useHeavyModel(usr_inpt: str, history: list)-> bool:
-    return (ExplicitcheckForHeavyReasoning(usr_inpt) or ContextDependentReasoning(usr_inpt, history))
+routing_prompt = prompts["router"]["prompt"]
 
     #Function to save history in a json file
 def saveHistory(history: list) -> None:
@@ -89,9 +73,53 @@ def summarize(history: list) -> list:
     
     return [syst_prompt, new_summary] + recent # Return reconstructed history: system prompt + new summary + recent messages
 
+    #Function to get context for router to choose which model to use during  conversation
+def get_router_context(history: list) -> tuple:
+    summary, recent = None, []
+    
+    if len(history) > 1 and history[1]["role"] == "system" and history[1]["content"].startswith("Conversation summary"):
+        summary = history[1]["content"]
+        
+        for msg in reversed(history):
+            if msg["role"] == "user": recent.append(msg)
+            if len(recent) == 4: break
+        recent.reverse()
+    return summary, recent
+
+#Function to let router decide which model to use according to context and history
+def router(usr_inpt, history):
+    summary, recent = get_router_context(history)
+    
+    router_input = {"user_input" : usr_inpt,
+                    "conversation_summary" : summary,
+                    "recent_messages" : recent}
+    
+    messages = [
+        {"role": "system",
+         "content": routing_prompt},
+        
+        {"role": "user",
+         "content": json.dumps(router_input, ensure_ascii=False)}
+    ]
+    
+    response = ollama.chat(ROUTER_MODEL, messages=messages)
+    
+    if not response.message.content:
+        return {"use_heavy": False}
+    
+    # Try to extract clean JSON
+    clean_json = extract_json_robust((response.message.content))
+    
+    if clean_json and isinstance(clean_json, dict):
+        print(clean_json) #debugging
+        return clean_json
+    else:
+        return {"use_heavy": True}
+
     #Handles the chatbot interaction by selecting the appropriate model, generating a response, and updating conversation history.
 def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
-    model = hm if useHeavyModel(usr_inpt, history) else lm
+    route = router(usr_inpt, history)
+    model = hm if route["use_heavy"] else lm
         
     print(f"Irix({model}): ", end='', flush=True)
     bot_answer_content = ""
@@ -125,6 +153,7 @@ def main() -> None:
         chatbot(user_prompt, light_model, heavy_model, history)
         history = summarize(history)
         saveHistory(history)
+
 
 if __name__ == "__main__":
     main()
