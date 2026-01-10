@@ -142,12 +142,12 @@ def router(usr_inpt, history):
     #Handles the chatbot interaction by selecting the appropriate model, generating a response, and updating conversation history.
 def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
     route = router(usr_inpt, history)
-    if route["path"] == "deliberate":
+    if route["path"] == "direct":
         start = time.time()
         
         model = lm
         
-        print(f"Irix: ", end='', flush=True)
+        print(f"Irix({model}): ", end='', flush=True)
         bot_answer_content = ""
         bot_answer = ollama.chat(model= model, messages=history, stream=True)
         
@@ -178,7 +178,7 @@ def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
         
         model = hm
         
-        print(f"Irix: ", end='', flush=True)
+        print(f"Irix({model}): ", end='', flush=True)
         bot_answer_content = ""
         bot_answer = ollama.chat(model= model, messages=synth_message + history, stream=True)
         
