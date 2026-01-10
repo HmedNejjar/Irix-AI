@@ -1,4 +1,5 @@
-"""Irix v1.0: Basic chatbot using 2 models 'qwen2.5:7b' and ;qwen3:8b' for reasoning with temp history to save chat"""
+"""Irix v1.1: added context dependent reasoning to explicit check for smart routing of the chatbot"""
+
 
 import ollama
 
@@ -8,9 +9,22 @@ def ExplicitcheckForHeavyReasoning(usr_inpt: str) -> bool:
     text = usr_inpt.lower()
     return any(k in text for k in keywords)
 
+    #Function to check if user's query requires complex reasoning from context
+def ContextDependentReasoning(usr_inpt: str, history: list) -> bool:
+    if not history or history[-2]["role"] != "assistant":
+        return False
+
+    pronouns = ("this", "that", "it", "what you said")
+    text = usr_inpt.lower().strip()
+    return True if any(p in text for p in pronouns) and len(text.split()) <= 5 else False
+
+    #Function to decide which model to use
+def useHeavyModel(usr_inpt: str, history: list)-> bool:
+    return (ExplicitcheckForHeavyReasoning(usr_inpt) or ContextDependentReasoning(usr_inpt, history))
+
     #Handles the chatbot interaction by selecting the appropriate model, generating a response, and updating conversation history.
-def chatbot(usr_inpt,lm,hm,history) -> None:
-    model = hm if ExplicitcheckForHeavyReasoning(usr_inpt) else lm
+def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
+    model = hm if useHeavyModel(usr_inpt, history) else lm
         
     print(f"Irix({model}): ", end='', flush=True)
     bot_answer_content = ""
