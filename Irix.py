@@ -1,6 +1,5 @@
-"""Irix v1.6.2: Fixed minor bugs & clean structure of code"""
+"""Irix v1.6.3: Fixed minor bugs & clean structure of code"""
 
-from __extract_json_robust import extract_json_robust
 from Agents import Agent
 from router import router
 from memory import saveHistory, loadHistory, summarize
@@ -76,7 +75,7 @@ def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
         
         print(f"Irix({model}): ", end='', flush=True)
         bot_answer_content = ""
-        bot_answer = ollama.chat(model= model, messages=synth_message + history, stream=True)
+        bot_answer = ollama.chat(model= model, messages=synth_message + history[-2:], stream=True)
         
         for chunk in bot_answer:                                
             if chunk.message.content:                           

@@ -12,7 +12,7 @@ class Agent:
                     {"role" : "user", "content" : usr_inpt}]
         
         if context:
-            messages.insert(1, {"role" : "user", "content" : "Context: "+ json.dumps(context, ensure_ascii=False, indent=2)})
+            messages.insert(1, {"role" : "system", "content" : "Context: "+ json.dumps(context, ensure_ascii=False, indent=2)})
             
         response = ollama.chat(model=self.model, messages=messages)
         content = response.message.content
