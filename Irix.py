@@ -1,8 +1,11 @@
-"""Irix v1.6.1: Fixed self eval function"""
-
+"""Irix v1.6.2: Fixed minor bugs & clean structure of code"""
 
 from __extract_json_robust import extract_json_robust
 from Agents import Agent
+from router import router
+from memory import saveHistory, loadHistory, summarize
+from telemetry import log_telemetry, self_eval
+
 import ollama
 import json
 import time
@@ -32,123 +35,9 @@ agents = [Agent("edge_case_agent", AGENT, agents_prompt["edge_case"]),
           Agent("constraints_agent", AGENT, agents_prompt["constraints"]),
           Agent("builder_agent", AGENT, agents_prompt["builder"])]
 
-
-    #Function to log bot's output 
-def log_telemetry(record: dict) -> None:
-    with open(TELEMETRY_FILE, "a") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + '\n')
-def self_eval(usr_input: str, route: dict, answer: str):
-    content = eval_prompt.format(
-        question=usr_input,
-        use_heavy=(route["path"] == "deliberate"),
-        answer=answer
-    )
-
-    message = [{"role": "system", "content": content}]
-    response = ollama.chat(model=ROUTER_MODEL, messages=message)
-
-    result = extract_json_robust(response.message.content)
-    return result if isinstance(result, dict) else None
-
-
-
-    #Function to save history in a json file
-def saveHistory(history: list) -> None:
-    with open(HISTORY_FILE, "w") as f:
-        json.dump(history, f, indent=2)
-
-    #Function to load existing history
-def loadHistory(sys_prompt: str) -> list:
-    try:
-        with open(HISTORY_FILE, "r") as f:
-            history:list  = json.load(f)
-            if isinstance(history, list):
-                return history
-    except FileNotFoundError:
-        return [{"role" : "system", "content" : sys_prompt}]
-
-    #Function to summarize conversation history when it exceeds trigger length
-def summarize(history: list) -> list:
-    syst_prompt =  history[0]
-    #Define a flag to check for existing summary 
-    has_summary = len(history) > 1 and history[1]["role"] == "system" and  history[1]["content"].startswith("Conversation summary")
-    
-    if has_summary:                                                     #
-        existing_summary, raw_messages = history[1], history[2:]        #   Define boundaries between
-    else:                                                               #   summary and raw messages
-        existing_summary, raw_messages = None, history[1:]              #
-
-    if len(raw_messages) <= SUMMARY_TRIGGER:
-        return history
-    # Split messages into "overflow" (to be summarized) and "recent" (to keep intact)
-    overflow = raw_messages[:-HISTORY_MAXSIZE+2]
-    recent = raw_messages[-HISTORY_MAXSIZE+2:]
-
-    summarization_input = []
-    
-    if existing_summary:
-        summarization_input.append(existing_summary) # Include existing summary if it exists (to build upon it)
-    
-    summarization_input.extend(overflow) # Add overflow messages to be summarized
-    
-    summary_message = [{"role": "system", "content": summary_prompt},
-        {
-            "role": "user",
-            "content": json.dumps(summarization_input, ensure_ascii=False, indent=2)
-        }]
-
-    message = ollama.chat(model= SUMMARY_MODEL, messages=summary_message)
-    new_summary = {"role" : "system",
-                   "content" : f"Conversation summary : {message.message.content}"}
-    
-    return [syst_prompt, new_summary] + recent # Return reconstructed history: system prompt + new summary + recent messages
-
-    #Function to get context for router to choose which model to use during  conversation
-def get_router_context(history: list) -> tuple:
-    summary, recent = None, []
-    
-    if len(history) > 1 and history[1]["role"] == "system" and history[1]["content"].startswith("Conversation summary"):
-        summary = history[1]["content"]
-        
-        for msg in reversed(history):
-            if msg["role"] == "user": recent.append(msg)
-            if len(recent) == 4: break
-        recent.reverse()
-    return summary, recent
-
-#Function to let router decide which model to use according to context and history
-def router(usr_inpt, history):
-    summary, recent = get_router_context(history)
-    
-    router_input = {"user_input" : usr_inpt,
-                    "conversation_summary" : summary,
-                    "recent_messages" : recent}
-    
-    messages = [
-        {"role": "system",
-         "content": routing_prompt},
-        
-        {"role": "user",
-         "content": json.dumps(router_input, ensure_ascii=False)}
-    ]
-    
-    response = ollama.chat(ROUTER_MODEL, messages=messages)
-    
-    if not response.message.content:
-        return {"path": "direct"}
-    
-    # Try to extract clean JSON
-    clean_json = extract_json_robust((response.message.content))
-    
-    if clean_json and isinstance(clean_json, dict):
-        print(clean_json) #debugging
-        return clean_json
-    else:
-        return {"path": "deliberate"}
-
     #Handles the chatbot interaction by selecting the appropriate model, generating a response, and updating conversation history.
 def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
-    route = router(usr_inpt, history)
+    route = router(usr_inpt, history, routing_prompt, ROUTER_MODEL)
     if route["path"] == "direct":
         start = time.time()
         
@@ -210,10 +99,10 @@ def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
     "latency_ms": latency
     }
 
-    eval_result = self_eval(usr_inpt, route, bot_answer_content)
+    eval_result = self_eval(usr_inpt,eval_prompt, ROUTER_MODEL, route, bot_answer_content)
     if eval_result:
         telemetry["self_eval"] = eval_result
-    log_telemetry(telemetry)
+    log_telemetry(TELEMETRY_FILE, telemetry)
 
     
     #Main function that runs the Irix AI assistant
@@ -221,7 +110,7 @@ def main() -> None:
     system_prompt = sys_prompt
 
     light_model, heavy_model = LIGHT_MODEL , HEAVY_MODEL
-    history = loadHistory(system_prompt)
+    history = loadHistory(HISTORY_FILE, system_prompt)
 
     while True:
         user_prompt = input("You: ").strip()
@@ -232,8 +121,8 @@ def main() -> None:
                         "content" : user_prompt}
         history.append(user_message)
         chatbot(user_prompt, light_model, heavy_model, history)
-        history = summarize(history)
-        saveHistory(history)
+        history = summarize(history, summary_prompt, SUMMARY_MODEL, SUMMARY_TRIGGER, HISTORY_MAXSIZE)
+        saveHistory(HISTORY_FILE, history)
 
 
 if __name__ == "__main__":
