@@ -1,4 +1,4 @@
-"""Irix v1.6: Modified Irix to work with multiple agents by dividing task if required"""
+"""Irix v1.6.1: Fixed self eval function"""
 
 
 from __extract_json_robust import extract_json_robust
@@ -38,11 +38,18 @@ def log_telemetry(record: dict) -> None:
     with open(TELEMETRY_FILE, "a") as f:
         f.write(json.dumps(record, ensure_ascii=False) + '\n')
 def self_eval(usr_input: str, route: dict, answer: str):
-    message = [{"role": "system","content": eval_prompt}]
+    content = eval_prompt.format(
+        question=usr_input,
+        use_heavy=(route["path"] == "deliberate"),
+        answer=answer
+    )
+
+    message = [{"role": "system", "content": content}]
     response = ollama.chat(model=ROUTER_MODEL, messages=message)
-    
+
     result = extract_json_robust(response.message.content)
     return result if isinstance(result, dict) else None
+
 
 
     #Function to save history in a json file
