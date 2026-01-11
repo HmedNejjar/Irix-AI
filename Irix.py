@@ -1,4 +1,4 @@
-"""Irix v1.6.3: Fixed minor bugs & clean structure of code"""
+"""Irix v1.7: Parallel thinking of agents through threading for better execution"""
 
 from Agents import Agent
 from router import router
@@ -8,6 +8,7 @@ from telemetry import log_telemetry, self_eval
 import ollama
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 PROMPT_FILE = "_prompts.json"
 HISTORY_FILE = "history.json"
@@ -34,8 +35,13 @@ agents = [Agent("edge_case_agent", AGENT, agents_prompt["edge_case"]),
           Agent("constraints_agent", AGENT, agents_prompt["constraints"]),
           Agent("builder_agent", AGENT, agents_prompt["builder"])]
 
+def run_agent(agent: Agent, usr_inpt):
+    return agent.run(usr_inpt, context=None)
+
     #Handles the chatbot interaction by selecting the appropriate model, generating a response, and updating conversation history.
 def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
+    agents_outputs = None
+
     route = router(usr_inpt, history, routing_prompt, ROUTER_MODEL)
     if route["path"] == "direct":
         start = time.time()
@@ -60,9 +66,13 @@ def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
     else:
         agents_outputs = []
         
-        for agent in agents:
-            result = agent.run(usr_inpt, context= None)
-            agents_outputs.append(result)
+        with ThreadPoolExecutor(max_workers=len(agents)) as executor:
+            futures = [
+                executor.submit(run_agent, agent, usr_inpt)
+                for agent in agents]
+
+            for future in as_completed(futures):
+                agents_outputs.append(future.result())
         
         synth_payload = {"question" : usr_inpt, "agents" : agents_outputs}
          
@@ -95,6 +105,7 @@ def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
     "router_output": route,
     "model_used": model,
     "answer_length": len(bot_answer_content),
+    "agents" : agents_outputs if route["path"] == "deliberate" else None,
     "latency_ms": latency
     }
 
