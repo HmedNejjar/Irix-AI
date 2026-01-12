@@ -1,4 +1,4 @@
-"""Irix v1.7: Parallel thinking of agents through threading for better execution"""
+"""Irix v1.7.1: Added context to agents"""
 
 from Agents import Agent
 from router import router
@@ -35,8 +35,8 @@ agents = [Agent("edge_case_agent", AGENT, agents_prompt["edge_case"]),
           Agent("constraints_agent", AGENT, agents_prompt["constraints"]),
           Agent("builder_agent", AGENT, agents_prompt["builder"])]
 
-def run_agent(agent: Agent, usr_inpt):
-    return agent.run(usr_inpt, context=None)
+def run_agent(agent: Agent, usr_inpt, context):
+    return agent.run(usr_inpt, context=context)
 
     #Handles the chatbot interaction by selecting the appropriate model, generating a response, and updating conversation history.
 def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
@@ -65,10 +65,10 @@ def chatbot(usr_inpt: str,lm: str,hm: str,history: list) -> None:
         latency = int((time.time() - start)*1000)
     else:
         agents_outputs = []
-        
+        agent_context = {"conversation_summary" : history[:-1], "route decision" : route}
         with ThreadPoolExecutor(max_workers=len(agents)) as executor:
             futures = [
-                executor.submit(run_agent, agent, usr_inpt)
+                executor.submit(run_agent, agent, usr_inpt, agent_context)
                 for agent in agents]
 
             for future in as_completed(futures):
