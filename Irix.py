@@ -1,4 +1,4 @@
-"""Irix v1.7.1: Added context to agents"""
+"""Irix v1.7.2: Modified heavy agent prompt for cleaner output"""
 
 from Agents import Agent
 from router import router
