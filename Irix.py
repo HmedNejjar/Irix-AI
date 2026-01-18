@@ -1,4 +1,4 @@
-"""Irix v1.7.5: Modified prompts for cleaner output"""
+"""Irix v1.7.6: Modified heavy agent for better output"""
 
 from Agents import Agent
 from router import router
@@ -15,7 +15,7 @@ HISTORY_FILE = "history.json"
 TELEMETRY_FILE = "_router_telemetry.jsonl"
 AGENT = "qwen3:1.7b"
 LIGHT_MODEL = "qwen2.5:7b"
-HEAVY_MODEL = "qwen3:8b"
+HEAVY_MODEL = "deepseek-r1"
 SUMMARY_MODEL = "phi3:mini"
 ROUTER_MODEL = "phi3:mini"
 HISTORY_MAXSIZE = 14
