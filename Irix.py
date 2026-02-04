@@ -1,4 +1,4 @@
-"""Irix v1.7.6: Modified heavy agent for better output"""
+"""Irix v1.7.7: Modified prompts for better output"""
 
 from Agents import Agent
 from router import router
