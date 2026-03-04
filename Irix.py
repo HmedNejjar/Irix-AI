@@ -1,4 +1,4 @@
-"""Irix v1.8: CLI wrapper around IrixSystem class"""
+"""Irix v1.8.1: Minor fixes"""
 
 from IrixAI import IrixSystem
 

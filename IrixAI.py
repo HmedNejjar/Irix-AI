@@ -43,7 +43,7 @@ class IrixSystem:
         # Load conversation state
         self.history = loadHistory(self.HISTORY_FILE, self.sys_prompt)
 
-    def process(self, usr_inpt: str) -> str | None:
+    def process(self, usr_inpt: str) -> str:
         """
         Main entry point for processing a request, following the Irix logic path.
         This is what your Harbor adapter will call.
@@ -64,9 +64,9 @@ class IrixSystem:
         )
         saveHistory(self.HISTORY_FILE, self.history)
         
-        return bot_answer_content
+        return bot_answer_content if bot_answer_content else ""
 
-    def _run_logic(self, usr_inpt: str) -> str | None:
+    def _run_logic(self, usr_inpt: str) -> str:
         agents_outputs = None
         route = router(usr_inpt, self.history, self.routing_prompt, self.ROUTER_MODEL)
         
@@ -114,7 +114,7 @@ class IrixSystem:
         self._log_and_eval(usr_inpt, route, model, bot_answer_content, agents_outputs, latency)
         
         self.history.append({"role": "assistant", "content": bot_answer_content})
-        return bot_answer_content
+        return bot_answer_content if bot_answer_content else ""
 
     def _log_and_eval(self, usr_inpt, route, model, answer, agents_out, latency):
         telemetry = {
