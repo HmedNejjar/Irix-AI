@@ -6,9 +6,9 @@ Irix-AI is a sophisticated Multi-Agent System (MAS) designed to generate consist
 
 *   **Dynamic Routing:** A smart router analyzes each user query to decide between a simple `direct` response or a complex `deliberate` path involving multiple agents.
 *   **Multi-Agent Deliberation:** For complex tasks, Irix-AI employs a team of agents:
-    *   `Analyst Agent`: Identifies assumptions, constraints, and edge cases.
-    *   `Critic Agent`: Challenges solutions and identifies flaws, risks, and counterarguments.
-    *   `Builder Agent`: Proposes clear and practical solutions.
+    *   `Analyst Agent`: Deconstructs the problem to identify core assumptions, boundary conditions, and analytical edge cases.
+    *   `Critic Agent`: Identifies flaws, risks, logical fallacies, and potential failure modes in a given premise or solution.
+    *   `Builder Agent`: Proposes a direct, practical, and actionable solution to the core problem.
 *   **Parallel Processing:** Agents run in parallel using threading, significantly speeding up the deliberation process.
 *   **Synthesis Model:** A dedicated "heavy" model arbitrates and synthesizes the outputs from the various agents into a single, coherent, and final answer.
 *   **Automated Conversation Memory:** Manages conversation context by automatically summarizing the history when it exceeds a certain length, ensuring long-term coherence without exceeding model context limits.
@@ -30,6 +30,7 @@ Irix-AI follows a dynamic workflow to process user input:
 ## System Architecture
 
 *   `Irix.py`: The main application entry point that orchestrates the entire workflow, from user input to final output.
+*   `IrixAI.py`: Contains the core `IrixSystem` class, managing the main logic, agent orchestration, and state.
 *   `Agents.py`: Defines the `Agent` class that serves as the blueprint for all specialized agents.
 *   `router.py`: Contains the logic for the routing controller, deciding whether to use the direct or deliberate path.
 *   `memory.py`: Manages the conversation history, including saving, loading, and summarization logic.
@@ -41,11 +42,11 @@ Irix-AI follows a dynamic workflow to process user input:
 
 Irix-AI relies on `ollama` to run various local language models, each chosen for a specific task:
 
-*   **Router Model:** `phi3:mini`
+*   **Router Model:** `granite3.1-moe:3b`
 *   **Specialized Agents:** `qwen3:1.7b`
 *   **Light Model (Direct Path):** `qwen2.5:7b`
 *   **Heavy Model (Synthesis):** `qwen3:8b`
-*   **Summary Model:** `phi3:mini`
+*   **Summary Model:** `qwen3:1.7b`
 
 ## Getting Started
 
@@ -69,7 +70,7 @@ Irix-AI relies on `ollama` to run various local language models, each chosen for
 
 3.  Download the necessary models using Ollama:
     ```bash
-    ollama pull phi3:mini
+    ollama pull granite3.1-moe:3b
     ollama pull qwen3:1.7b
     ollama pull qwen2.5:7b
     ollama pull qwen3:8b
