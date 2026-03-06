@@ -1,4 +1,4 @@
-"""Irix v1.8.3: Modified prompts for better output"""
+"""Irix v1.8.4: Modified heavy agent prompt, summary and router model"""
 
 from IrixAI import IrixSystem
 
