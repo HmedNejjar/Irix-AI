@@ -1,4 +1,4 @@
-"""Irix v1.8.1: Minor fixes"""
+"""Irix v1.8.2: Changed heavy agent, summary trigger and routing structure"""
 
 from IrixAI import IrixSystem
 

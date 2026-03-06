@@ -10,17 +10,16 @@ from telemetry import log_telemetry, self_eval
 
 class IrixSystem:
     def __init__(self):
-        # Configuration constants from your original Irix.py
         self.PROMPT_FILE = "_prompts.json"
         self.HISTORY_FILE = "history.json"
         self.TELEMETRY_FILE = "_router_telemetry.jsonl"
         self.AGENT_MODEL = "qwen3:1.7b"
         self.LIGHT_MODEL = "qwen2.5:7b"
-        self.HEAVY_MODEL = "deepseek-r1"
+        self.HEAVY_MODEL = "qwen3:8b"
         self.SUMMARY_MODEL = "phi3:mini"
         self.ROUTER_MODEL = "phi3:mini"
         self.HISTORY_MAXSIZE = 14
-        self.SUMMARY_TRIGGER = 16
+        self.SUMMARY_TRIGGER = 20 
 
         # Load prompts
         with open(self.PROMPT_FILE, 'r') as f:
@@ -44,22 +43,16 @@ class IrixSystem:
         self.history = loadHistory(self.HISTORY_FILE, self.sys_prompt)
 
     def process(self, usr_inpt: str) -> str:
-        """
-        Main entry point for processing a request, following the Irix logic path.
-        This is what your Harbor adapter will call.
-        """
         user_message = {"role": "user", "content": usr_inpt}
         self.history.append(user_message)
         
-        # Execute the core chatbot logic
         bot_answer_content = self._run_logic(usr_inpt)
         
-        # Post-processing: memory management and persistence
         self.history = summarize(
-            self.history, 
-            self.summary_prompt, 
-            self.SUMMARY_MODEL, 
-            self.SUMMARY_TRIGGER, 
+            self.history,
+            self.summary_prompt,
+            self.SUMMARY_MODEL,
+            self.SUMMARY_TRIGGER,
             self.HISTORY_MAXSIZE
         )
         saveHistory(self.HISTORY_FILE, self.history)
@@ -73,7 +66,6 @@ class IrixSystem:
         start_time = time.time()
         
         if route["path"] == "direct":
-            # Direct path: use light model
             model = self.LIGHT_MODEL
             print(f"Irix({model}): ", end='', flush=True)
             bot_answer_content = ""
@@ -83,17 +75,24 @@ class IrixSystem:
                     bot_answer_content += chunk.message.content
                     print(chunk.message.content, end='', flush=True)
             print()
+
         else:
-            # Deliberate path: multi-agent reasoning
+            # Pass only the summary string to agents, not full history
+            summary_context = None
+            if len(self.history) > 1 and self.history[1]["role"] == "system" and self.history[1]["content"].startswith("Conversation summary"):
+                summary_context = self.history[1]["content"]
+
+            agent_context = {
+                "conversation_summary": summary_context,
+                "route_decision": route
+            }
+
             agents_outputs = []
-            agent_context = {"conversation_summary": self.history[:-1], "route decision": route}
-            
             with ThreadPoolExecutor(max_workers=len(self.agents)) as executor:
                 futures = [executor.submit(agent.run, usr_inpt, agent_context) for agent in self.agents]
                 for future in as_completed(futures):
                     agents_outputs.append(future.result())
             
-            # Synthesis using heavy model
             model = self.HEAVY_MODEL
             synth_payload = {"question": usr_inpt, "agents": agents_outputs}
             synth_messages = [
@@ -109,7 +108,6 @@ class IrixSystem:
                     print(chunk.message.content, end='', flush=True)
             print()
 
-        # Telemetry and Self-Evaluation
         latency = int((time.time() - start_time) * 1000)
         self._log_and_eval(usr_inpt, route, model, bot_answer_content, agents_outputs, latency)
         
@@ -126,7 +124,11 @@ class IrixSystem:
             "agents": agents_out,
             "latency_ms": latency
         }
-        eval_result = self_eval(usr_inpt, self.eval_prompt, self.ROUTER_MODEL, route, answer)
-        if eval_result:
-            telemetry["self_eval"] = eval_result
+
+        # only run self-eval on deliberate path — it's meaningless otherwise
+        if route["path"] == "deliberate":
+            eval_result = self_eval(usr_inpt, self.eval_prompt, self.ROUTER_MODEL, route, answer)
+            if eval_result:
+                telemetry["self_eval"] = eval_result
+
         log_telemetry(self.TELEMETRY_FILE, telemetry)
