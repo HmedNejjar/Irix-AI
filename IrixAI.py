@@ -17,7 +17,7 @@ class IrixSystem:
         self.LIGHT_MODEL = "qwen2.5:7b"
         self.HEAVY_MODEL = "qwen3:8b"
         self.SUMMARY_MODEL = "qwen3:1.7b"
-        self.ROUTER_MODEL = "phi3:mini"
+        self.ROUTER_MODEL = "granite3.1-moe:3b"
         self.HISTORY_MAXSIZE = 14
         self.SUMMARY_TRIGGER = 20
 
