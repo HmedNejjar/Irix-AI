@@ -105,7 +105,7 @@ class IrixSystem:
                     agents_outputs.append(future.result())
 
             # Pick synthesis prompt based on whether web context exists
-            synth_prompt = self.web_prompt if web_context else self.heavy_prompt
+            synth_prompt = self.heavy_prompt
 
             model = self.HEAVY_MODEL
             synth_payload = {

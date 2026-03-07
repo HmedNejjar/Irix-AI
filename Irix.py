@@ -1,4 +1,4 @@
-"""Irix v1.9.0: Modified Router structure for web search, deliberate algorithm for dynamic agent call, added web search summary prompt"""
+"""Irix v1.9.2: Fix Minor bug"""
 
 from IrixAI import IrixSystem
 
