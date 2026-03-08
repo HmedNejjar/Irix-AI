@@ -1,4 +1,4 @@
-"""Irix v1.9.2: Fix Minor bug"""
+"""Irix v1.10.0: Changed Irix Structure with complexity classification and web search classification for both Direct and Deliberate paths"""
 
 from IrixAI import IrixSystem
 

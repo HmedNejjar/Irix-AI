@@ -24,6 +24,52 @@ def get_router_context(history: list) -> tuple:
     return summary, recent
 
 
+def complexity_classifier(usr_inpt: str, history: list, prompt: str, model: str) -> int:
+    """Stage 1: Classify complexity as score 1–5. Returns int."""
+    summary, recent = get_router_context(history)
+
+    payload = {
+        "user_input": usr_inpt,
+        "conversation_summary": summary,
+        "recent_messages": recent
+    }
+
+    messages = [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}
+    ]
+
+    try:
+        response = ollama.chat(model=model, messages=messages)
+        result = extract_json_robust(response.message.content)
+        if isinstance(result, dict):
+            score = result.get("complexity", 3)
+            if isinstance(score, int) and 1 <= score <= 5:
+                return score
+    except Exception as e:
+        print(f"⚠️ Complexity classifier error: {e}")
+
+    return 3  # safe default
+
+
+def search_classifier(usr_inpt: str, prompt: str, model: str) -> bool:
+    """Stage 2: Decide if web search is needed. Returns bool."""
+    messages = [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": json.dumps({"user_input": usr_inpt}, ensure_ascii=False)}
+    ]
+
+    try:
+        response = ollama.chat(model=model, messages=messages)
+        result = extract_json_robust(response.message.content)
+        if isinstance(result, dict):
+            return bool(result.get("needs_search", False))
+    except Exception as e:
+        print(f"⚠️ Search classifier error: {e}")
+
+    return False  # safe default: don't search
+
+
 def fetch_web_results(query: str) -> str:
     """Fetch raw search results. Returns condensed string or error message."""
     try:
@@ -52,62 +98,46 @@ def summarize_web_results(raw_results: str, prompt: str, query: str, model: str)
         response = ollama.chat(model=model, messages=messages)
         if response.message.content:
             return response.message.content.strip()
-        else: return ""
+        return ""
     except Exception as e:
         return f"Summarization failed: {str(e)}"
 
 
-def router(usr_inpt: str, history: list, routing_prompt: str,summ_prompt: str, model: str, summary_model: str):
-    summary, recent = get_router_context(history)
+def router(usr_inpt: str, history: list, complexity_prompt: str, search_prompt: str,
+           summ_prompt: str, model: str, summary_model: str) -> dict:
+    """
+    Two-stage router:
+      Stage 1 — Complexity Classifier  → score 1–5
+      Stage 2 — Search Classifier      → yes/no  (runs for ALL paths)
 
-    router_input = {
-        "user_input": usr_inpt,
-        "conversation_summary": summary,
-        "recent_messages": recent
+    Returns route dict with keys: path, complexity, needs_search, web_context
+    """
+
+    # ── Stage 1: Complexity ──────────────────────────────────────────────────
+    complexity = complexity_classifier(usr_inpt, history, complexity_prompt, model)
+    print(f"[Stage 1] Complexity score: {complexity}")
+
+    # ── Stage 2: Search ──────────────────────────────────────────────────────
+    needs_search = search_classifier(usr_inpt, search_prompt, model)
+    print(f"[Stage 2] Needs search: {needs_search}")
+
+    # ── Path decision ────────────────────────────────────────────────────────
+    path = "deliberate" if complexity > 3 else "direct"
+
+    route = {
+        "path": path,
+        "complexity": complexity,
+        "needs_search": needs_search,
+        "web_context": None
     }
 
-    messages = [
-        {"role": "system", "content": routing_prompt},
-        {"role": "user", "content": json.dumps(router_input, ensure_ascii=False)}
-    ]
-
-    # Get routing decision with fallback
-    response = None
-    try:
-        response = ollama.chat(model=model, messages=messages)
-    except Exception as e:
-        print(f"⚠️ Router model error: {e}")
-        try:
-            installed = [m.model for m in ollama.list().models]
-            fallback = next((m for m in ["phi3:mini"] if m in installed), installed[0] if installed else None)
-            if fallback:
-                print(f"ℹ️ Falling back to '{fallback}' for routing.")
-                response = ollama.chat(model=fallback, messages=messages)
-        except Exception as e2:
-            print(f"⚠️ Fallback routing failed: {e2}")
-            return {"path": "deliberate", "needs_search": False, "complexity": 3}
-
-    if not response or not response.message.content:
-        return {"path": "deliberate", "needs_search": False, "complexity": 3}
-
-    route = extract_json_robust(response.message.content)
-
-    if not route or not isinstance(route, dict):
-        return {"path": "deliberate", "needs_search": False, "complexity": 3}
-
-    # Normalize: needs_search is a clean flag, not a path value
-    needs_search = route.get("needs_search", False) or route.get("intent") == "search"
-    route["needs_search"] = needs_search
-    route.pop("intent_search", None)  # clean up any stray keys
-
-    # Search pipeline: fetch → summarize → attach — happens HERE, before agents
+    # ── Search pipeline (universal — runs regardless of path) ────────────────
     if needs_search:
         print(f"🔍 Web search triggered for: {usr_inpt}")
         raw = fetch_web_results(usr_inpt)
         summarized = summarize_web_results(raw, summ_prompt, usr_inpt, summary_model)
         route["web_context"] = summarized
-        route["path"] = "deliberate"  # search always implies deliberate
         print(f"✅ Web context ready ({len(summarized)} chars)")
 
-    print(f"Router: {route}")
+    print(f"Router final: {route}")
     return route
