@@ -1,4 +1,4 @@
-"""Irix v1.10.2: Prompt modification for better outputs and change router complexity management"""
+"""Irix v1.10.3: Prompt modification for better outputs"""
 
 from IrixAI import IrixSystem
 
