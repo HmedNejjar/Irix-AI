@@ -26,7 +26,7 @@ class IrixSystem:
         self.HISTORY_MAXSIZE = 14
         self.SUMMARY_TRIGGER = 20
 
-        with open(self.PROMPT_FILE, 'r') as f:
+        with open(self.PROMPT_FILE, 'r', encoding= 'utf-8') as f:
             self.prompts = json.load(f)
 
         self.sys_prompt           = self.prompts["system"]["default"]

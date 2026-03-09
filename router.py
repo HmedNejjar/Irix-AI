@@ -122,7 +122,7 @@ def router(usr_inpt: str, history: list, complexity_prompt: str, search_prompt: 
     print(f"[Stage 2] Needs search: {needs_search}")
 
     # ── Path decision ────────────────────────────────────────────────────────
-    path = "deliberate" if complexity > 3 else "direct"
+    path = "deliberate" if complexity > 2 else "direct"
 
     route = {
         "path": path,

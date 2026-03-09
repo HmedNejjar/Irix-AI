@@ -1,4 +1,4 @@
-"""Irix v1.10.1: Minor propt modification for heavy agent"""
+"""Irix v1.10.2: Prompt modification for better outputs and change router complexity management"""
 
 from IrixAI import IrixSystem
 
