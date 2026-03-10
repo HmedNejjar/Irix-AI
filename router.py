@@ -40,7 +40,7 @@ def complexity_classifier(usr_inpt: str, history: list, prompt: str, model: str)
     ]
 
     try:
-        response = ollama.chat(model=model, messages=messages)
+        response = ollama.chat(model=model, messages=messages,keep_alive=0)
         result = extract_json_robust(response.message.content)
         if isinstance(result, dict):
             score = result.get("complexity", 3)
@@ -60,7 +60,7 @@ def search_classifier(usr_inpt: str, prompt: str, model: str) -> bool:
     ]
 
     try:
-        response = ollama.chat(model=model, messages=messages)
+        response = ollama.chat(model=model, messages=messages, keep_alive=0)
         result = extract_json_robust(response.message.content)
         if isinstance(result, dict):
             return bool(result.get("needs_search", False))
@@ -95,7 +95,7 @@ def summarize_web_results(raw_results: str, prompt: str, query: str, model: str)
         {"role": "user", "content": f"Query: {query}\n\nRaw results:\n{raw_results}"}
     ]
     try:
-        response = ollama.chat(model=model, messages=messages)
+        response = ollama.chat(model=model, messages=messages, keep_alive=0)
         if response.message.content:
             return response.message.content.strip()
         return ""

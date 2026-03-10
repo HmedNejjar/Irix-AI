@@ -12,7 +12,7 @@ def self_eval(usr_input: str, eval_prompt: str, model:str,  route: dict, answer:
     )
 
     message = [{"role": "system", "content": content}]
-    response = ollama.chat(model=model, messages=message)
+    response = ollama.chat(model=model, messages=message,keep_alive=0)
 
     result = extract_json_robust(response.message.content)
     return result if isinstance(result, dict) else None

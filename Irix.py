@@ -1,4 +1,4 @@
-"""Irix v1.10.3: Prompt modification for better outputs"""
+"""Irix v1.10.4: added keep_alive = 0 to froce model usage, modified eval for better handling"""
 
 from IrixAI import IrixSystem
 

@@ -1,7 +1,9 @@
 # type: ignore
 import re
 import json
+import math
 import time
+import sys
 from lm_eval.api.model import LM
 from lm_eval.api.registry import register_model
 from lm_eval import simple_evaluate
@@ -56,7 +58,7 @@ def extract_predicted_answer(processed_output: str) -> str | None:
 def extract_expected_answer(doc: dict) -> str | None:
     """Pull the gold answer from a GSM8K doc. Handles both answer formats."""
     answer_field = doc.get("answer", "")
-    # GSM8K stores answers as "... #### 42"
+    # GSM8K stores answers as "... #### "
     match = re.search(r'####\s*(\d+(?:\.\d+)?)', str(answer_field))
     if match:
         return match.group(1)
@@ -65,16 +67,30 @@ def extract_expected_answer(doc: dict) -> str | None:
     return nums[-1] if nums else None
 
 
+def _as_float(value: str | None) -> float | None:
+    """Convert a numeric string to a float, or return None on failure."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
 # ── Wrapper ──────────────────────────────────────────────────────────────────
 
 @register_model("irix_pipeline")
 class IrixEvalWrapper(LM):
     def __init__(self):
         super().__init__()
+        # Force UTF-8 stdout so emoji don't crash on Windows consoles
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         self.irix = IrixSystem()
         self.base_sys_prompt = self.irix.history[0]
         self.question_log: list[dict] = []   # collects per-question records
         self._q_index = 0
+        self.filename = "irix_eval_results.xlsx"
 
     def generate_until(self, requests):
         res = []
@@ -91,16 +107,20 @@ class IrixEvalWrapper(LM):
             try:
                 raw_output = self.irix.process(prompt)
             except Exception as e:
-                print(f"[Q{self._q_index}] ⚠️  Error: {e}")
+                print(f"[Q{self._q_index}] [ERROR] {e}")
                 raw_output = ""
             latency_ms = int((time.time() - t0) * 1000)
 
-            processed  = ensure_gsm8k_format(raw_output)
-            predicted  = extract_predicted_answer(processed)
-            passed     = (predicted == expected) if (predicted and expected) else False
+            processed     = ensure_gsm8k_format(raw_output)
+            predicted_raw  = extract_predicted_answer(processed)
+            expected_raw   = expected
+            predicted      = _as_float(predicted_raw)
+            expected       = _as_float(expected_raw)
+            passed         = (math.isclose(predicted, expected, rel_tol=1e-6, abs_tol=1e-6)
+                              if (predicted is not None and expected is not None) else False)
 
             # ── Per-question console output ───────────────────────────────
-            status = "✅ PASS" if passed else "❌ FAIL"
+            status = "✅" if passed else "❌"
             print(f"\n{'='*60}")
             print(f"[Q{self._q_index}] {status}  |  expected={expected}  predicted={predicted}  ({latency_ms}ms)")
             print(f"PROMPT (last 200): ...{prompt[-200:]}")
@@ -127,8 +147,32 @@ class IrixEvalWrapper(LM):
                 "prompt_tail":    prompt[-300:],
             })
 
+            self._flush_to_excel()
             res.append(processed)
         return res
+
+    def _flush_to_excel(self) -> None:
+        """Rewrite the Excel file with all questions logged so far. Called after every question."""
+        try:
+            df_questions = pd.DataFrame(self.question_log)
+            df_failures  = df_questions[df_questions["correct"] == False][[
+                "q_index", "expected", "predicted", "route_path",
+                "complexity", "model_used", "latency_ms", "prompt_tail", "raw_tail"
+            ]]
+            total   = len(df_questions)
+            correct = int(df_questions["correct"].sum())
+            df_agg  = pd.DataFrame([{
+                "questions_so_far": total,
+                "correct":          correct,
+                "accuracy_pct":     round(correct / total * 100, 1) if total else 0.0,
+            }])
+            with pd.ExcelWriter(self.filename, engine="openpyxl") as writer:
+                df_questions.to_excel(writer, sheet_name="Per-Question",  index=False)
+                df_agg.to_excel(      writer, sheet_name="Aggregate",     index=False)
+                df_failures.to_excel( writer, sheet_name="Failures Only", index=False)
+            print(f"[SAVED] Q{self._q_index} flushed to {self.filename}  ({correct}/{total})")
+        except Exception as e:
+            print(f"[WARN] Excel flush failed: {e}")
 
     def _read_last_telemetry(self) -> dict:
         """Read the last line from the telemetry JSONL — best-effort."""
@@ -164,34 +208,12 @@ if __name__ == "__main__":
         random_seed=42
     )
 
-    # ── Sheet 1: per-question breakdown ──────────────────────────────────────
+    # ── Sheets written live after each question — just print final summary ────
     df_questions = pd.DataFrame(irix_wrapper.question_log)
-
-    # ── Sheet 2: aggregate metrics ───────────────────────────────────────────
-    agg_rows = []
-    for task_name, metrics in results["results"].items():
-        row = {"Task": task_name}
-        row.update(metrics)
-        agg_rows.append(row)
-    df_agg = pd.DataFrame(agg_rows)
-
-    # ── Sheet 3: failure summary — only failed questions ─────────────────────
-    df_failures = df_questions[df_questions["correct"] == False][[
-        "q_index", "expected", "predicted", "route_path",
-        "complexity", "model_used", "latency_ms", "prompt_tail", "raw_tail"
-    ]]
-
-    filename = "irix_eval_results.xlsx"
-    with pd.ExcelWriter(filename, engine="openpyxl") as writer:
-        df_questions.to_excel(writer, sheet_name="Per-Question",  index=False)
-        df_agg.to_excel(      writer, sheet_name="Aggregate",     index=False)
-        df_failures.to_excel( writer, sheet_name="Failures Only", index=False)
-
-    # ── Console summary ───────────────────────────────────────────────────────
     total   = len(df_questions)
-    correct = df_questions["correct"].sum()
+    correct = int(df_questions["correct"].sum())
     print(f"\n{'='*60}")
-    print(f"✅ Evaluation complete:  {correct}/{total}  ({correct/total*100:.1f}%)")
-    print(f"📄 Results saved to {filename}  (3 sheets: Per-Question, Aggregate, Failures Only)")
+    print(f"[DONE] Evaluation complete:  {correct}/{total}  ({correct/total*100:.1f}%)")
+    print(f"[OUT]  Results saved to {irix_wrapper.filename}  (3 sheets: Per-Question, Aggregate, Failures Only)")
     print(f"{'='*60}\n")
     print(utils.make_table(results))

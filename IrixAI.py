@@ -84,7 +84,7 @@ class IrixSystem:
             messages = self._build_direct_messages(route)
             print(f"Irix({model}): ", end='', flush=True)
             bot_answer_content = ""
-            for chunk in ollama.chat(model=model, messages=messages, stream=True):
+            for chunk in ollama.chat(model=model, messages=messages, stream=True, keep_alive=0):
                 if chunk.message.content:
                     bot_answer_content += chunk.message.content
                     print(chunk.message.content, end='', flush=True)
@@ -132,7 +132,7 @@ class IrixSystem:
 
             print(f"Irix({model}): ", end='', flush=True)
             bot_answer_content = ""
-            for chunk in ollama.chat(model=model, messages=synth_messages + self.history[-2:], stream=True):
+            for chunk in ollama.chat(model=model, messages=synth_messages + self.history[-2:], stream=True, keep_alive=0):
                 if chunk.message.content:
                     bot_answer_content += chunk.message.content
                     print(chunk.message.content, end='', flush=True)
