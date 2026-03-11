@@ -114,12 +114,26 @@ CSV_HEADERS = [
     "prompt_tail", "raw_tail"
 ]
 
-def init_csv():
-    """Create CSV with headers if it doesn't exist yet."""
+def init_csv() -> set[int]:
+    """
+    Create CSV with headers if it doesn't exist.
+    Returns set of already-completed q_index values for resume.
+    """
     if not os.path.exists(CSV_FILE):
         with open(CSV_FILE, "w", newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=CSV_HEADERS)
             writer.writeheader()
+        return set()
+
+    # CSV exists — load completed indices
+    completed = set()
+    try:
+        df = pd.read_csv(CSV_FILE, encoding='utf-8')
+        completed = set(df["q_index"].dropna().astype(int).tolist())
+        print(f"[Resume] Found {len(completed)} completed questions: {sorted(completed)}")
+    except Exception as e:
+        print(f"[Resume] Warning: could not read existing CSV ({e}). Starting fresh.")
+    return completed
 
 def append_csv(row: dict):
     """Append a single row immediately after each question."""
@@ -139,14 +153,31 @@ class IrixEvalWrapper(LM):
         self.question_log: list[dict] = []
         self._q_index  = 0
         self._n_passed = 0
-        init_csv()
+        self._completed = init_csv()   # ← set of already-done q_index values
 
     def generate_until(self, requests):
         res = []
         for request in requests:
             self._q_index += 1
-            prompt     = request.args[0]
-            doc        = getattr(request, "doc", {})
+            prompt = request.args[0]
+            doc    = getattr(request, "doc", {})
+
+            # ── RESUME: skip already-completed questions ──────────────────
+            if self._q_index in self._completed:
+                print(f"[Q{self._q_index}] SKIPPED (already completed)")
+                # Reconstruct processed output from CSV so lm-eval gets a valid answer
+                processed = self._load_processed_from_csv(self._q_index)
+                if processed is None:
+                    processed = "#### 0"  # fallback — shouldn't happen
+                res.append(processed)
+                # Count it toward running score display
+                predicted_f = to_float(extract_predicted_answer(processed))
+                expected_f  = to_float(extract_expected_answer(doc))
+                if floats_equal(predicted_f, expected_f):
+                    self._n_passed += 1
+                continue
+
+            # ── RUN: fresh question ───────────────────────────────────────
             expected   = extract_expected_answer(doc)
             expected_f = to_float(expected)
 
@@ -203,10 +234,27 @@ class IrixEvalWrapper(LM):
             }
 
             self.question_log.append(row)
-            append_csv(row)  # written immediately -- crash-safe
-
+            append_csv(row)
             res.append(processed)
         return res
+
+    def _load_processed_from_csv(self, q_index: int) -> str | None:
+        """Reconstruct a #### answer line from the saved CSV row for a completed question."""
+        try:
+            df = pd.read_csv(CSV_FILE, encoding='utf-8')
+            row = df[df["q_index"] == q_index]
+            if not row.empty:
+                predicted = row.iloc[0].get("predicted")
+                raw_tail  = row.iloc[0].get("raw_tail", "")
+                # Prefer raw_tail if it already has #### marker
+                if isinstance(raw_tail, str) and re.search(r'####\s*\d+', raw_tail):
+                    return raw_tail
+                # Otherwise reconstruct from predicted column
+                if predicted is not None and str(predicted) not in ("", "nan"):
+                    return f"#### {predicted}"
+        except Exception as e:
+            print(f"[Resume] Warning: could not load row for Q{q_index}: {e}")
+        return None
 
     def _read_last_telemetry(self) -> dict:
         try:
@@ -241,7 +289,21 @@ if __name__ == "__main__":
         random_seed=42
     )
 
-    df_questions = pd.DataFrame(irix_wrapper.question_log)
+    # Merge skipped rows (from CSV) + new rows (from this run) for final outputs
+    skipped_indices = irix_wrapper._completed
+    new_rows        = irix_wrapper.question_log
+
+    if skipped_indices:
+        try:
+            df_existing = pd.read_csv(CSV_FILE, encoding='utf-8')
+            df_skipped  = df_existing[df_existing["q_index"].isin(skipped_indices)]
+            df_questions = pd.concat(
+                [df_skipped, pd.DataFrame(new_rows)], ignore_index=True
+            ).sort_values("q_index")
+        except Exception:
+            df_questions = pd.DataFrame(new_rows)
+    else:
+        df_questions = pd.DataFrame(new_rows)
 
     agg_rows = []
     for task_name, metrics in results["results"].items():
@@ -255,16 +317,15 @@ if __name__ == "__main__":
         "route_path", "complexity", "model_used", "latency_ms", "prompt_tail", "raw_tail"
     ]]
 
-    # per_question already written live; overwrite with final clean copy
     df_questions.to_csv("irix_eval_per_question.csv", index=False, encoding='utf-8')
     df_agg.to_csv(      "irix_eval_aggregate.csv",    index=False, encoding='utf-8')
     df_failures.to_csv( "irix_eval_failures.csv",     index=False, encoding='utf-8')
 
     total   = len(df_questions)
-    correct = df_questions["correct"].sum()
+    correct = df_questions["correct"].sum() if total else 0
     sep     = "=" * 60
     print(f"\n{sep}")
-    print(f"Evaluation complete:  {correct}/{total}  ({correct / total * 100:.1f}%)")
+    print(f"Evaluation complete:  {correct}/{total}  ({correct / total * 100:.1f}% )")
     print(f"Results saved to 3 CSV files: per_question, aggregate, failures")
     print(f"{sep}\n")
     print(utils.make_table(results))

@@ -1,4 +1,4 @@
-"""Irix v1.10.5: Modified answer extraction for precision"""
+"""Irix v1.10.6: Use history"""
 
 from IrixAI import IrixSystem
 
