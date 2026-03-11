@@ -1,4 +1,4 @@
-"""Irix v1.10.4: added keep_alive = 0 to froce model usage, modified eval for better handling"""
+"""Irix v1.10.5: Modified answer extraction for precision"""
 
 from IrixAI import IrixSystem
 
@@ -8,7 +8,7 @@ def main() -> None:
     while True:
         user_prompt = input("You: ").strip()
         if user_prompt.lower() in ('exit', 'quit', 'bye'):
-            print("Irix: cya👋")
+            print("Irix: cya!")
             break
         
         Irix.process(user_prompt)
