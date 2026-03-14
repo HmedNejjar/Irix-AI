@@ -1,4 +1,4 @@
-"""Irix v1.10.8 Added MMLU test, modified prompts accordingly"""
+"""Irix v1.10.9 Added keep_alive = 1"""
 
 from IrixAI import IrixSystem
 

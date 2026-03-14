@@ -95,7 +95,7 @@ def summarize_web_results(raw_results: str, prompt: str, query: str, model: str)
         {"role": "user", "content": f"Query: {query}\n\nRaw results:\n{raw_results}"}
     ]
     try:
-        response = ollama.chat(model=model, messages=messages)
+        response = ollama.chat(model=model, messages=messages, keep_alive=1)
         if response.message.content:
             return response.message.content.strip()
         return ""
