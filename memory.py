@@ -46,7 +46,7 @@ def summarize(history: list, prompt: str, model:str,trigger:int, max_size: int) 
             "content": json.dumps(summarization_input, ensure_ascii=False, indent=2)
         }]
 
-    message = ollama.chat(model= model, messages=summary_message,keep_alive=0)
+    message = ollama.chat(model= model, messages=summary_message)
     new_summary = {"role" : "system",
                    "content" : f"Conversation summary : {message.message.content}"}
     
