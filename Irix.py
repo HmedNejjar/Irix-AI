@@ -1,4 +1,4 @@
-"""Irix v1.10.7: Minor change"""
+"""Irix v1.10.8 Added MMLU test, modified prompts accordingly"""
 
 from IrixAI import IrixSystem
 
