@@ -285,7 +285,7 @@ if __name__ == "__main__":
         model=irix_wrapper,
         tasks=tasks,
         num_fewshot=8,
-        limit=10,
+        limit=None,
         random_seed=42
     )
 
@@ -305,10 +305,18 @@ if __name__ == "__main__":
     else:
         df_questions = pd.DataFrame(new_rows)
 
+    total   = len(df_questions)
+    correct = int(df_questions["correct"].sum()) if total else 0
+    irix_pass_rate = correct / total if total else 0.0
+
     agg_rows = []
     for task_name, metrics in results["results"].items():
         row = {"Task": task_name}
         row.update(metrics)
+        row["irix_pass_rate"]  = round(irix_pass_rate, 10)
+        row["irix_pass_count"] = correct
+        row["irix_fail_count"] = total - correct
+        row["irix_total"]      = total
         agg_rows.append(row)
     df_agg = pd.DataFrame(agg_rows)
 
@@ -321,11 +329,9 @@ if __name__ == "__main__":
     df_agg.to_csv(      "irix_eval_aggregate.csv",    index=False, encoding='utf-8')
     df_failures.to_csv( "irix_eval_failures.csv",     index=False, encoding='utf-8')
 
-    total   = len(df_questions)
-    correct = df_questions["correct"].sum() if total else 0
     sep     = "=" * 60
     print(f"\n{sep}")
-    print(f"Evaluation complete:  {correct}/{total}  ({correct / total * 100:.1f}% )")
+    print(f"Evaluation complete:  {correct}/{total}  ({irix_pass_rate * 100:.2f}% pass rate)")
     print(f"Results saved to 3 CSV files: per_question, aggregate, failures")
     print(f"{sep}\n")
     print(utils.make_table(results))

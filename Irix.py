@@ -1,4 +1,4 @@
-"""Irix v1.10.6: Use history"""
+"""Irix v1.10.7: Minor change"""
 
 from IrixAI import IrixSystem
 
