@@ -16,11 +16,11 @@ class IrixSystem:
         self.TELEMETRY_FILE  = "_router_telemetry.jsonl"
 
         # Models
-        self.AGENT_MODEL     = "qwen3:1.7b"
-        self.LIGHT_MODEL     = "qwen2.5:7b"
+        self.AGENT_MODEL     = "qwen3:8b"
+        self.LIGHT_MODEL     = "qwen3:8b"
         self.HEAVY_MODEL     = "qwen3:8b"
-        self.SUMMARY_MODEL   = "qwen3:1.7b"
-        self.CLASSIFIER_MODEL = "qwen3:1.7b"   # single model for both classifiers
+        self.SUMMARY_MODEL   = "qwen3:8b"
+        self.CLASSIFIER_MODEL = "qwen3:8b"   # single model for both classifiers
 
         # Memory config — SUMMARY_TRIGGER must be > HISTORY_MAXSIZE
         self.HISTORY_MAXSIZE = 14
